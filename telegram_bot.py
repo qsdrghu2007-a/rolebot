@@ -7,6 +7,7 @@ Telegram机器人核心模块
 """
 
 import asyncio
+import json
 import logging
 import time
 import traceback
@@ -35,6 +36,359 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# ── i18n / 国际化 ─────────────────────────────────────────────
+# 默认中文，用户可通过 /language 切换
+T = {
+    "zh": {
+        "perm_denied": "抱歉，您没有被授权使用此机器人。",
+        "welcome": "你好呀~ 我是你的AI伙伴！\n\n可以跟我聊天，我会记住重要的事情。\n使用 /help 查看可用命令\n使用 /language 切换语言",
+        "help_title": "Telegram机器人帮助",
+        "help_body": """功能：
+• 智能对话：基于 LLM API 的智能对话
+• 长期记忆：记住重要的对话内容
+• 人格定制：支持自定义角色人格
+• 思考模式：开启后模型会先推理再回答，质量更高
+• 编辑功能：直接回复某条消息即可编辑，后续自动重新生成
+
+可用命令：
+/suggest - 生成3条候选回复供你选择
+/start - 开始使用
+/mood - 查看当前心情
+/continue - bot 独自继续生成下一条
+/regenerate - 重新生成上一轮回复
+/clear - 清除当前对话历史
+/clear_memories - 清除所有长期记忆（警告）
+/list_memories - 列出所有长期记忆
+/delete_memory <编号> - 删除指定记忆
+/thinking - 思考模式（按钮版）
+/language - 切换语言 / Switch language
+/help - 显示帮助
+/status - 机器人状态
+/compact - 日记总结对话
+
+注意：
+• 机器人会记住重要的对话内容
+• /clear 只清除对话，长期记忆还在
+• 对话数据存储在本地，保护隐私""",
+        "clear_prompt": "清除前可以先做日记总结，要总结吗？",
+        "clear_done": "已清除 {n} 条对话历史",
+        "clear_none": "还没有对话历史可以清除~",
+        "clear_compact_btn": "总结并清除",
+        "clear_direct_btn": "直接清除",
+        "cancel_btn": "取消",
+        "mem_clear_warn": "【警告】这将清除所有长期记忆！\n\n包括：\n• 你的姓名、年龄等个人信息\n• 你的喜好偏好\n• 重要事件和约定\n\n操作不可逆，确定要清除吗？\n发送 /confirm_clear_memories 确认清除",
+        "mem_cleared": "已清除 {n} 条长期记忆... 以前的记忆已全部清除...",
+        "mem_none": "还没有长期记忆存储",
+        "mem_list_empty": "还没有长期记忆存储~\n\n发送消息和我聊天，我会记住重要的事情哦~",
+        "mem_list_header": "你有 {n} 条长期记忆：",
+        "mem_list_tip": "提示: 用 /delete_memory <编号> 删除单条记忆",
+        "mem_type_personal": "[个人]",
+        "mem_type_preference": "[喜好]",
+        "mem_type_event": "[事件]",
+        "mem_type_emotion": "[情感]",
+        "mem_type_fact": "[事实]",
+        "mem_type_other": "[其他]",
+        "mem_delete_btn": "删除 #{i}: {text}",
+        "mem_deleted": "[已删除] 记忆 #{i}：{text}",
+        "mem_no_list": "已经没有长期记忆了~",
+        "mem_del_err_num": "【错误】请提供记忆编号\n\n用法: /delete_memory <编号>\n\n直接输入 /delete_memory 可查看按钮版",
+        "mem_del_err_pos": "【错误】编号必须是正整数",
+        "mem_del_err_range": "【错误】编号 {i} 不存在，你只有 {n} 条记忆\n\n用 /delete_memory 查看列表",
+        "mem_del_fail": "【错误】删除失败，请稍后再试",
+        "mem_page_header": "长期记忆 ({total} 条，第 {page}/{pages} 页):",
+        "mem_page_truncated": "（内容过长截断）",
+        "thinking_status_on": "当前: 开启 (强度: *{effort}*)",
+        "thinking_status_off": "当前: 关闭",
+        "thinking_btn_high": "高强度思考",
+        "thinking_btn_max": "最大强度",
+        "thinking_btn_off": "关闭思考",
+        "thinking_set_high": "开启思考模式 [强度: *high*]\n\n> 模型回复会更加细致，但响应时间更长",
+        "thinking_set_max": "开启思考模式 [强度: *max*]\n\n> 最大化思考强度，回复质量最高",
+        "thinking_set_off": "关闭思考模式",
+        "thinking_unknown": "未知参数。用法:\n/thinking high - 高强度\n/thinking max - 最大强度\n/thinking off - 关闭",
+        "regen_no_msg": "没有可以重新生成的消息~ 先发条消息给我吧",
+        "regen_error": "重新生成出错了: {e}",
+        "msg_error": "出错了: {e}，请稍后再试",
+        "edit_not_found": "找不到要编辑的消息记录~ 可能太久了，不支持编辑",
+        "edit_broken": "编辑完成，但对话记录似乎出了问题~",
+        "edit_regenerate_error": "编辑后重新生成出错: {e}",
+        "summary_header": "当前对话结构:",
+        "summary_truncated": "...（共 {n} 条，只显示最近 20 条）",
+        "compact_none": "自上次 /clear 以来还没有对话记录~",
+        "compact_writing": "正在写日记...",
+        "compact_nothing": "已没有对话可总结~",
+        "compact_done": "日记写好啦！\n\n*{title}*\n\n{content}\n\n`/compact list` 可查看所有日记",
+        "compact_error": "写日记出错了: {e}",
+        "compact_list_empty": "还没有日记记录~\n使用 /compact 生成第一篇日记吧",
+        "compact_list_header": "日记列表 ({total} 篇，第 {page}/{pages} 页):",
+        "compact_back_btn": "◀ 返回列表",
+        "compact_del_btn": "删除",
+        "prev_page_btn": "◀ 上一页",
+        "next_page_btn": "下一页 ▶",
+        "status_tab_overview": "运行概况",
+        "status_tab_data": "数据统计",
+        "status_tab_history": "最近对话",
+        "status_tab_mood": "心情",
+        "status_overview": """Bot状态 · 运行概况
+运行时间: {uptime}
+今日消息: {today} / 总计: {total}
+成功率: {rate:.1%}
+平均响应: {avg:.1f}s
+数据库: {db}
+模型: {model}  温度: {temp}
+思考: {thinking}""",
+        "status_data": """Bot状态 · 数据统计
+对话条数: {conv}
+长期记忆: {mem}
+日记总结: {compact}
+记忆类型分布:
+{types}
+上次 clear: {lc}
+最近日记: {lcp}""",
+        "status_data_none": "无",
+        "status_data_never": "从未",
+        "status_history_empty": "Bot状态 · 最近对话\n\n暂无对话记录~",
+        "status_history_header": "Bot状态 · 最近对话",
+        "status_history_you": "你说",
+        "status_history_bot": "bot说",
+        "status_mood": """Bot状态 · 心情
+开心: {bar_h} {h}/10
+想念: {bar_m} {m}/10
+精力: {bar_e} {e}/10
+生气: {bar_a} {a}/10
+性欲: {bar_ar} {ar}/10
+文爱状态: {erotic}""",
+        "erotic_active": "活跃中",
+        "erotic_normal": "正常",
+        "mood_title": "当前心情",
+        "mood_body": """开心: {bar_h} {h}/10
+想念: {bar_m} {m}/10
+精力: {bar_e} {e}/10（值越高精力越好）
+生气: {bar_a} {a}/10
+性欲: {bar_ar} {ar}/10""",
+        "continue_no_history": "还没有对话历史呢~ 先聊几句吧",
+        "continue_error": "继续对话出错: {e}",
+        "suggest_no_history": "还没有对话历史呢~ 先聊几句吧",
+        "suggest_generating": "正在生成候选回复...",
+        "suggest_failed": "生成候选回复失败了~ 再来一次吧",
+        "suggest_choose": "选一条作为你的回复：",
+        "suggest_option": "选项{i}",
+        "suggest_cancel_btn": "取消",
+        "suggest_said": "你说: {text}",
+        "suggest_expired": "候选已过期，请重新 /suggest",
+        "suggest_invalid": "选项无效",
+        "suggest_error": "生成回复出错: {e}",
+        "cb_thinking_high": "已设置: 高强度思考",
+        "cb_thinking_max": "已设置: 最大强度思考",
+        "cb_thinking_off": "已关闭思考模式",
+        "cb_param_error": "参数错误",
+        "cb_deleted": "已删除",
+        "cb_del_fail": "删除失败",
+        "cb_no_perm": "无权限",
+        "cb_not_found": "记录不存在",
+        "cb_unknown": "未知操作",
+        "cb_cancelled": "已取消",
+        "cb_summarizing": "正在总结...",
+        "cb_clearing": "正在清除...",
+        "cb_clear_compacted": "日记已保存，已清除 {n} 条对话\n\n*{title}*\n_{content}_",
+        "cb_clear_direct": "已清除 {n} 条对话历史",
+        "lang_prompt": "请选择语言 / Select language:",
+        "lang_set": "语言已切换为：中文 🇨🇳",
+        "bot_cmd_suggest": "生成3条候选回复供选择",
+        "bot_cmd_mood": "查看当前心情",
+        "bot_cmd_continue": "让bot继续独自生成下一条回复",
+        "bot_cmd_regenerate": "重新生成上一轮回复",
+        "bot_cmd_clear": "清除对话历史（短期记忆）",
+        "bot_cmd_clear_memories": "清除长期记忆(警告)",
+        "bot_cmd_thinking": "思考模式 (按钮版)",
+        "bot_cmd_help": "显示帮助信息",
+        "bot_cmd_status": "显示机器人状态",
+        "bot_cmd_start": "开始使用机器人",
+        "bot_cmd_compact": "日记总结对话",
+        "bot_cmd_language": "切换语言 / Switch language",
+        "bot_startup": "Telegram机器人启动成功！\n启动时间: {time}",
+        "status_uptime_hours": "{h}小时{m}分钟{s}秒",
+    },
+    "en": {
+        "perm_denied": "Sorry, you are not authorized to use this bot.",
+        "welcome": "Hey there! I'm your AI companion!\n\nChat with me — I'll remember important things.\nUse /help to see available commands\nUse /language to switch language",
+        "help_title": "Telegram Bot Help",
+        "help_body": """Features:
+• Smart chat: LLM-powered conversation
+• Long-term memory: remembers important content
+• Custom persona: define your own character
+• Thinking mode: model reasons before replying (higher quality)
+• Edit: reply to any message to edit it, auto-regenerates
+
+Commands:
+/suggest - Generate 3 candidate replies
+/start - Start the bot
+/mood - View current mood
+/continue - Bot continues on its own
+/regenerate - Regenerate last reply
+/clear - Clear conversation history
+/clear_memories - Clear all long-term memories (warning)
+/list_memories - List all long-term memories
+/delete_memory <N> - Delete a memory by number
+/thinking - Thinking mode (button UI)
+/language - 切换语言 / Switch language
+/help - Show this help
+/status - Bot status dashboard
+/compact - Summarize chat as diary entry
+
+Notes:
+• The bot remembers important things you share
+• /clear only clears chat, memories remain
+• Chat data stored locally for privacy""",
+        "clear_prompt": "You can summarize before clearing. Would you like to?",
+        "clear_done": "Cleared {n} conversation messages",
+        "clear_none": "No conversation history to clear~",
+        "clear_compact_btn": "Summarize & Clear",
+        "clear_direct_btn": "Clear Directly",
+        "cancel_btn": "Cancel",
+        "mem_clear_warn": """[WARNING] This will delete ALL long-term memories!
+
+This includes:
+• Personal info (name, age, etc.)
+• Your preferences
+• Important events and plans
+
+This action cannot be undone. Are you sure?
+Send /confirm_clear_memories to confirm""",
+        "mem_cleared": "Cleared {n} long-term memories... All past memories are gone...",
+        "mem_none": "No long-term memories yet",
+        "mem_list_empty": "No long-term memories yet~\n\nSend me a message and I'll remember the important stuff~",
+        "mem_list_header": "You have {n} long-term memories:",
+        "mem_list_tip": "Tip: use /delete_memory <number> to delete a specific memory",
+        "mem_type_personal": "[Personal]",
+        "mem_type_preference": "[Pref]",
+        "mem_type_event": "[Event]",
+        "mem_type_emotion": "[Emotion]",
+        "mem_type_fact": "[Fact]",
+        "mem_type_other": "[Other]",
+        "mem_delete_btn": "Delete #{i}: {text}",
+        "mem_deleted": "[Deleted] Memory #{i}: {text}",
+        "mem_no_list": "No long-term memories left~",
+        "mem_del_err_num": "[Error] Please provide a memory number\n\nUsage: /delete_memory <number>\n\nUse /delete_memory without args for the button UI",
+        "mem_del_err_pos": "[Error] Number must be a positive integer",
+        "mem_del_err_range": "[Error] Number {i} doesn't exist, you have {n} memories\n\nUse /delete_memory to view the list",
+        "mem_del_fail": "[Error] Deletion failed, please try again",
+        "mem_page_header": "Long-term memories ({total} total, page {page}/{pages}):",
+        "mem_page_truncated": "(content truncated)",
+        "thinking_status_on": "Current: ON (effort: *{effort}*)",
+        "thinking_status_off": "Current: OFF",
+        "thinking_btn_high": "High Effort",
+        "thinking_btn_max": "Max Effort",
+        "thinking_btn_off": "Turn Off",
+        "thinking_set_high": "Thinking mode ON [effort: *high*]\n\n> More detailed replies, higher latency",
+        "thinking_set_max": "Thinking mode ON [effort: *max*]\n\n> Max reasoning, best quality",
+        "thinking_set_off": "Thinking mode OFF",
+        "thinking_unknown": "Unknown argument. Usage:\n/thinking high - High effort\n/thinking max - Max effort\n/thinking off - Turn off",
+        "regen_no_msg": "No message to regenerate~ Send me something first",
+        "regen_error": "Regeneration error: {e}",
+        "msg_error": "Error: {e}, please try again later",
+        "edit_not_found": "Can't find the message to edit~ Maybe it's too old",
+        "edit_broken": "Edit completed, but something went wrong with the chat history~",
+        "edit_regenerate_error": "Regeneration after edit failed: {e}",
+        "summary_header": "Current conversation structure:",
+        "summary_truncated": "... ({n} messages total, showing last 20)",
+        "compact_none": "No conversation since last /clear~",
+        "compact_writing": "Writing diary entry...",
+        "compact_nothing": "Nothing left to summarize~",
+        "compact_done": "Diary entry written!\n\n*{title}*\n\n{content}\n\n`/compact list` to browse all entries",
+        "compact_error": "Diary writing error: {e}",
+        "compact_list_empty": "No diary entries yet~\nUse /compact to write the first one",
+        "compact_list_header": "Diary entries ({total} total, page {page}/{pages}):",
+        "compact_back_btn": "◀ Back to List",
+        "compact_del_btn": "Delete",
+        "prev_page_btn": "◀ Previous",
+        "next_page_btn": "Next ▶",
+        "status_tab_overview": "Overview",
+        "status_tab_data": "Data",
+        "status_tab_history": "History",
+        "status_tab_mood": "Mood",
+        "status_overview": """Bot Status · Overview
+Uptime: {uptime}
+Today: {today} / Total: {total}
+Success rate: {rate:.1%}
+Avg response: {avg:.1f}s
+DB size: {db}
+Model: {model}  Temp: {temp}
+Thinking: {thinking}""",
+        "status_data": """Bot Status · Data
+Conversations: {conv}
+Memories: {mem}
+Diaries: {compact}
+Memory type breakdown:
+{types}
+Last clear: {lc}
+Latest diary: {lcp}""",
+        "status_data_none": "none",
+        "status_data_never": "never",
+        "status_history_empty": "Bot Status · History\n\nNo recent conversations~",
+        "status_history_header": "Bot Status · History",
+        "status_history_you": "You",
+        "status_history_bot": "bot",
+        "status_mood": """Bot Status · Mood
+Happy: {bar_h} {h}/10
+Missing: {bar_m} {m}/10
+Energy: {bar_e} {e}/10
+Angry: {bar_a} {a}/10
+Arousal: {bar_ar} {ar}/10
+Erotic: {erotic}""",
+        "erotic_active": "Active",
+        "erotic_normal": "Normal",
+        "mood_title": "Current Mood",
+        "mood_body": """Happy: {bar_h} {h}/10
+Missing: {bar_m} {m}/10
+Energy: {bar_e} {e}/10
+Angry: {bar_a} {a}/10
+Arousal: {bar_ar} {ar}/10""",
+        "continue_no_history": "No conversation history yet~ Start chatting first",
+        "continue_error": "Continue error: {e}",
+        "suggest_no_history": "No conversation history yet~ Start chatting first",
+        "suggest_generating": "Generating candidate replies...",
+        "suggest_failed": "Failed to generate candidates~ Try again",
+        "suggest_choose": "Pick one as your reply:",
+        "suggest_option": "Option {i}",
+        "suggest_cancel_btn": "Cancel",
+        "suggest_said": "You: {text}",
+        "suggest_expired": "Candidates expired, use /suggest again",
+        "suggest_invalid": "Invalid option",
+        "suggest_error": "Reply generation error: {e}",
+        "cb_thinking_high": "Set: High effort thinking",
+        "cb_thinking_max": "Set: Max effort thinking",
+        "cb_thinking_off": "Thinking mode OFF",
+        "cb_param_error": "Parameter error",
+        "cb_deleted": "Deleted",
+        "cb_del_fail": "Deletion failed",
+        "cb_no_perm": "Access denied",
+        "cb_not_found": "Record not found",
+        "cb_unknown": "Unknown action",
+        "cb_cancelled": "Cancelled",
+        "cb_summarizing": "Summarizing...",
+        "cb_clearing": "Clearing...",
+        "cb_clear_compacted": "Diary saved, cleared {n} messages\n\n*{title}*\n_{content}_",
+        "cb_clear_direct": "Cleared {n} messages",
+        "lang_prompt": "请选择语言 / Select language:",
+        "lang_set": "Language switched to: English 🇬🇧",
+        "bot_cmd_suggest": "Generate 3 candidate replies",
+        "bot_cmd_mood": "View current mood",
+        "bot_cmd_continue": "Bot continues speaking",
+        "bot_cmd_regenerate": "Regenerate last reply",
+        "bot_cmd_clear": "Clear conversation history",
+        "bot_cmd_clear_memories": "Clear long-term memories (warning)",
+        "bot_cmd_thinking": "Thinking mode (button UI)",
+        "bot_cmd_help": "Show help",
+        "bot_cmd_status": "Show bot status",
+        "bot_cmd_start": "Start the bot",
+        "bot_cmd_compact": "Summarize chat as diary",
+        "bot_cmd_language": "切换语言 / Switch language",
+        "bot_startup": "Telegram bot started!\nStartup time: {time}",
+        "status_uptime_hours": "{h}h {m}m {s}s",
+    },
+}
 
 
 class TelegramBot:
@@ -105,6 +459,62 @@ class TelegramBot:
         logger.info("Telegram机器人初始化完成")
         self.loop = None
 
+    def _t(self, key: str, user_id: str = None, **kwargs) -> str:
+        """根据用户语言设置翻译字符串"""
+        if user_id is None:
+            lang = "zh"
+        else:
+            info = self.memory_db.get_user_info(str(user_id))
+            lang = "zh"
+            if info and info.get("settings") and isinstance(info["settings"], dict):
+                lang = info["settings"].get("language", "zh")
+        s = T.get(lang, T["zh"]).get(key, key)
+        if kwargs:
+            s = s.format(**kwargs)
+        return s
+
+    def _t_async(self, key: str, user_id, **kwargs) -> str:
+        """同步别名，用于非 async 上下文"""
+        return self._t(key, str(user_id), **kwargs)
+
+    def _set_lang(self, user_id: str, lang: str):
+        """保存用户语言设置"""
+        info = self.memory_db.get_user_info(user_id)
+        cursor = self.memory_db.conn.cursor()
+        settings = {}
+        if info and info.get("settings") and isinstance(info["settings"], dict):
+            settings = info["settings"]
+        settings["language"] = lang
+        if info:
+            cursor.execute(
+                "UPDATE user_info SET settings = ? WHERE user_id = ?",
+                (json.dumps(settings, ensure_ascii=False), user_id)
+            )
+        else:
+            cursor.execute(
+                "INSERT INTO user_info (user_id, settings) VALUES (?, ?)",
+                (user_id, json.dumps(settings, ensure_ascii=False))
+            )
+        self.memory_db.conn.commit()
+
+    async def language_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """处理/language命令 — 切换用户语言"""
+        user = update.effective_user
+        user_id = user.id
+
+        if not self._is_user_allowed(user_id):
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
+            return
+
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("中文 🇨🇳", callback_data="lang:zh"),
+             InlineKeyboardButton("English 🇬🇧", callback_data="lang:en")],
+        ])
+        await update.message.reply_text(
+            self._t("lang_prompt", str(user_id)),
+            reply_markup=kb
+        )
+
     def _is_user_allowed(self, user_id: int) -> bool:
         """检查用户是否被允许使用机器人
 
@@ -130,13 +540,10 @@ class TelegramBot:
         user_id = user.id
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
-        welcome_msg = """你好呀~ 我是你的AI伙伴！
-
-可以跟我聊天，我会记住重要的事情。
-使用 /help 查看可用命令"""
+        welcome_msg = self._t("welcome", str(user_id))
         await update.message.reply_text(welcome_msg)
 
         # 记录用户
@@ -151,44 +558,10 @@ class TelegramBot:
         user_id = user.id
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
-        help_text = """Telegram机器人帮助
-
-功能：
-- 智能对话：基于DeepSeek API的智能对话
-- 长期记忆：记住重要的对话内容
-- 人格定制：支持自定义角色人格
-- 思考模式：开启后模型会先推理再回答，质量更高
-- 编辑功能：直接回复某条消息即可编辑该消息，后续对话自动重新生成
-
-可用命令：
-/suggest - 生成3条候选回复供你选择
-/start - 开始使用机器人
-/mood - 查看当前心情
-/continue - bot独自继续生成下一条回复
-/regenerate - 重新生成上一轮回复（删除旧回复）
-/clear - 清除当前对话历史（短期记忆）
-/clear_memories - 清除所有长期记忆（警告）
-/list_memories - 列出所有长期记忆
-/delete_memory <编号> - 删除指定记忆（无参数则显示按钮版翻页列表）
-/thinking - 查看/设置思考模式（无参数显示按钮版）
-/help - 显示此帮助信息
-/status - 显示机器人状态
-/compact - 日记视角总结对话 (/compact list 查看历史日记)
-
-直接发送消息即可开始对话！
-
-注意：
-- 机器人会记住重要的对话内容
-- /clear 只清除当前对话，长期记忆还在
-- /clear_memories 会清除所有记住的个人信息、喜好等
-- 长期记忆可随时查看和删除单条
-- 在群组中默认不响应，除非被@
-- 对话数据存储在本地，保护隐私
-- 思考模式会增加响应时间，但回复质量更高
-"""
+        help_text = self._t("help_title", str(user_id)) + "\n\n" + self._t("help_body", str(user_id))
         await update.message.reply_text(help_text)
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -197,7 +570,7 @@ class TelegramBot:
         user_id = user.id
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
         await self._show_status_tab(update, str(user_id), "overview")
@@ -208,26 +581,27 @@ class TelegramBot:
         user_id = user.id
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
         since = self.memory_db.get_last_clear_at(str(user_id))
         messages = self.memory_db.get_messages_since_clear(str(user_id), since)
         has_msgs = bool(messages) or self.memory_db.get_recent_conversation(str(user_id), limit=1)
         if has_msgs:
+            uid_str = str(user_id)
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("总结并清除", callback_data="clear:compact"),
-                 InlineKeyboardButton("直接清除", callback_data="clear:direct")],
-                [InlineKeyboardButton("取消", callback_data="clear:cancel")],
+                [InlineKeyboardButton(self._t("clear_compact_btn", uid_str), callback_data="clear:compact"),
+                 InlineKeyboardButton(self._t("clear_direct_btn", uid_str), callback_data="clear:direct")],
+                [InlineKeyboardButton(self._t("cancel_btn", uid_str), callback_data="clear:cancel")],
             ])
-            await update.message.reply_text("清除前可以先做日记总结，要总结吗？", reply_markup=kb)
+            await update.message.reply_text(self._t("clear_prompt", uid_str), reply_markup=kb)
         else:
             deleted_count = self.memory_db.clear_user_conversation(str(user_id))
             self.memory_db.record_last_clear(str(user_id))
             if deleted_count > 0:
-                await update.message.reply_text(f"已清除 {deleted_count} 条对话历史")
+                await update.message.reply_text(self._t("clear_done", str(user_id), n=deleted_count))
             else:
-                await update.message.reply_text("还没有对话历史可以清除~")
+                await update.message.reply_text(self._t("clear_none", str(user_id)))
 
     async def clear_memories_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理/clear_memories命令
@@ -238,69 +612,53 @@ class TelegramBot:
         user_id = user.id
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
         # 确认消息
-        confirm_text = (
-            "【警告】这将清除所有长期记忆！\n\n"
-            "这包括：\n"
-            "• 你的姓名、年龄等个人信息\n"
-            "• 你的喜好偏好\n"
-            "• 重要事件和约定\n\n"
-            "操作不可逆，确定要清除吗？\n"
-            "发送 `/confirm_clear_memories` 确认清除"
-        )
+        confirm_text = self._t("mem_clear_warn", str(user_id))
         await update.message.reply_text(confirm_text, parse_mode='Markdown')
 
     async def confirm_clear_memories_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """处理/confirm_clear_memories命令 - 确认清除长期记忆"""
         user = update.effective_user
         user_id = user.id
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
-        # 清除长期记忆
         deleted_count = self.memory_db.clear_user_memories(str(user_id))
 
         if deleted_count > 0:
-            await update.message.reply_text(f"喵... 已清除 {deleted_count} 条长期记忆... 以前的记忆已全部清除...")
+            await update.message.reply_text(self._t("mem_cleared", str(user_id), n=deleted_count))
         else:
-            await update.message.reply_text("还没有长期记忆存储")
+            await update.message.reply_text(self._t("mem_none", str(user_id)))
 
     async def list_memories_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """处理/list_memories命令 - 列出所有长期记忆"""
         user = update.effective_user
         user_id = user.id
+        uid_str = str(user_id)
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", uid_str))
             return
 
-        # 获取所有长期记忆（带ID）
-        memories = self.memory_db.get_user_memories_with_id(str(user_id))
-
+        memories = self.memory_db.get_user_memories_with_id(uid_str)
         if not memories:
-            await update.message.reply_text("还没有长期记忆存储着呢~\n\n发送消息和我聊天，我会记住重要的事情哦~")
+            await update.message.reply_text(self._t("mem_list_empty", uid_str))
             return
 
-        # 格式化记忆列表
-        lines = [f"你有 {len(memories)} 条长期记忆：\n"]
+        lines = [self._t("mem_list_header", uid_str, n=len(memories)), ""]
         for idx, (mem_id, mem_type, content, importance) in enumerate(memories, 1):
-            # 截断过长的内容
             display_content = content[:60] + "..." if len(content) > 60 else content
-            type_emoji = {"personal": "[个人]", "preference": "[喜好]", "event": "[事件]", "emotion": "[情感]", "fact": "[事实]"}.get(mem_type, "[其他]")
-            lines.append(f"{idx}. {type_emoji} [{mem_type}] {display_content} (重要度:{importance})")
-
-        lines.append("\n提示: 用 `/delete_memory <编号>` 删除单条记忆")
-
-        # 如果消息太长，分段发送
+            type_key = "mem_type_" + (mem_type if mem_type in ("personal","preference","event","emotion","fact") else "other")
+            type_label = self._t(type_key, uid_str)
+            lines.append(f"{idx}. {type_label} [{mem_type}] {display_content} (imp:{importance})")
+        lines.append("")
+        lines.append(self._t("mem_list_tip", uid_str))
         message = "\n".join(lines)
         if len(message) > 4096:
-            # Telegram 单条消息限制 4096 字符
-            await update.message.reply_text(message[:4000] + "\n\n...（消息太长，只显示部分）")
+            await update.message.reply_text(message[:4000] + "\n\n...（太长，只显示部分）")
         else:
             await update.message.reply_text(message)
 
@@ -310,7 +668,7 @@ class TelegramBot:
         user_id = user.id
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
         args = context.args
@@ -320,31 +678,32 @@ class TelegramBot:
             await self._show_memory_page_via_message(update, user_id)
             return
 
+        uid_str = str(user_id)
         if not args[0].isdigit():
-            await update.message.reply_text("【错误】请提供记忆编号\n\n用法: `/delete_memory <编号>`\n\n直接输入 `/delete_memory` 可查看按钮版")
+            await update.message.reply_text(self._t("mem_del_err_num", uid_str))
             return
 
         memory_index = int(args[0])
         if memory_index < 1:
-            await update.message.reply_text("【错误】编号必须是正整数")
+            await update.message.reply_text(self._t("mem_del_err_pos", uid_str))
             return
 
-        memories = self.memory_db.get_user_memories_with_id(str(user_id))
+        memories = self.memory_db.get_user_memories_with_id(uid_str)
         if not memories:
-            await update.message.reply_text("还没有长期记忆存储")
+            await update.message.reply_text(self._t("mem_none", uid_str))
             return
 
         if memory_index > len(memories):
-            await update.message.reply_text(f"【错误】编号 {memory_index} 不存在，你只有 {len(memories)} 条记忆\n\n用 `/delete_memory` 查看列表")
+            await update.message.reply_text(self._t("mem_del_err_range", uid_str, i=memory_index, n=len(memories)))
             return
 
         mem_id, mem_type, content, importance = memories[memory_index - 1]
 
-        if self.memory_db.delete_memory_by_id(str(user_id), mem_id):
+        if self.memory_db.delete_memory_by_id(uid_str, mem_id):
             display_content = content[:40] + "..." if len(content) > 40 else content
-            await update.message.reply_text(f"[已删除] 记忆 #{memory_index}：{display_content}")
+            await update.message.reply_text(self._t("mem_deleted", uid_str, i=memory_index, text=display_content))
         else:
-            await update.message.reply_text("【错误】删除失败，请稍后再试")
+            await update.message.reply_text(self._t("mem_del_fail", uid_str))
 
     async def _show_memory_page_via_message(self, update: Update, user_id: int):
         """通过 update.message 发送记忆按钮列表（首次展示）"""
@@ -352,7 +711,7 @@ class TelegramBot:
         memories = self.memory_db.get_user_memories_with_id(uid)
 
         if not memories:
-            await update.message.reply_text("还没有长期记忆存储着呢~\n\n发送消息和我聊天，我会记住重要的事情哦~")
+            await update.message.reply_text(self._t("mem_list_empty", uid))
             return
 
         total = len(memories)
@@ -364,11 +723,11 @@ class TelegramBot:
         end = min(start + per_page, total)
         page_memories = memories[start:end]
 
-        lines = [f"长期记忆 ({total} 条，第 {page}/{total_pages} 页):"]
+        lines = [self._t("mem_page_header", uid, total=total, page=page, pages=total_pages)]
         for i, (mem_id, mem_type, content, importance) in enumerate(page_memories, start + 1):
             short = content[:50] + "..." if len(content) > 50 else content
-            type_emoji = {"personal": "[个人]", "preference": "[喜好]", "event": "[事件]",
-                          "emotion": "[情感]", "fact": "[事实]"}.get(mem_type, "[其他]")
+            type_key = f"mem_type_{mem_type}" if f"mem_type_{mem_type}" in T.get("zh", {}) else "mem_type_other"
+            type_emoji = self._t(type_key, uid)
             lines.append(f"{i}. {type_emoji} [{mem_type}] {short} (重要度:{importance})")
 
         text = "\n".join(lines)
@@ -377,13 +736,13 @@ class TelegramBot:
         for i, (mem_id, mem_type, content, importance) in enumerate(page_memories, start + 1):
             short = content[:30]
             button_rows.append([InlineKeyboardButton(
-                f"删除 #{i}: {short}", callback_data=f"delmem:{mem_id}:{page}"
+                self._t("mem_delete_btn", uid, i=i, text=short), callback_data=f"delmem:{mem_id}:{page}"
             )])
 
         nav_row = []
         nav_row.append(InlineKeyboardButton("📄 1/1", callback_data="noop"))
         if total_pages > 1:
-            nav_row.append(InlineKeyboardButton("下一页 ▶", callback_data="delmem_page:2"))
+            nav_row.append(InlineKeyboardButton(self._t("next_page_btn", uid), callback_data="delmem_page:2"))
         button_rows.append(nav_row)
 
         kb = InlineKeyboardMarkup(button_rows)
@@ -402,19 +761,21 @@ class TelegramBot:
         user_id = user.id
 
         if not self._is_user_allowed(user_id):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
+        uid_str = str(user_id)
         args = context.args
         if not args:
             current = self.llm_manager.get_thinking_status()
-            status_text = f"当前: {'开启' if current['enabled'] else '关闭'}"
             if current['enabled']:
-                status_text += f" (强度: *{current['effort']}*)"
+                status_text = self._t("thinking_status_on", uid_str, effort=current['effort'])
+            else:
+                status_text = self._t("thinking_status_off", uid_str)
             kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("高强度思考", callback_data="think:high"),
-                 InlineKeyboardButton("最大强度", callback_data="think:max")],
-                [InlineKeyboardButton("关闭思考", callback_data="think:off")],
+                [InlineKeyboardButton(self._t("thinking_btn_high", uid_str), callback_data="think:high"),
+                 InlineKeyboardButton(self._t("thinking_btn_max", uid_str), callback_data="think:max")],
+                [InlineKeyboardButton(self._t("thinking_btn_off", uid_str), callback_data="think:off")],
             ])
             await update.message.reply_text(status_text, reply_markup=kb, parse_mode='Markdown')
             return
@@ -423,15 +784,15 @@ class TelegramBot:
 
         if sub == "high":
             self.llm_manager.set_thinking(enabled=True, effort="high")
-            await update.message.reply_text("开启思考模式 [强度: *high*] | `/thinking max` 可切换为最大强度\n\n> 模型回复会更加细致，但响应时间更长", parse_mode='Markdown')
+            await update.message.reply_text(self._t("thinking_set_high", uid_str), parse_mode='Markdown')
         elif sub == "max":
             self.llm_manager.set_thinking(enabled=True, effort="max")
-            await update.message.reply_text("开启思考模式 [强度: *max*] | `/thinking high` 可切换为高强度\n\n> 最大化思考强度，回复质量最高，但响应时间最长", parse_mode='Markdown')
+            await update.message.reply_text(self._t("thinking_set_max", uid_str), parse_mode='Markdown')
         elif sub == "off":
             self.llm_manager.set_thinking(enabled=False)
-            await update.message.reply_text("关闭思考模式 | `/thinking high` 或 `/thinking max` 可重新开启", parse_mode='Markdown')
+            await update.message.reply_text(self._t("thinking_set_off", uid_str), parse_mode='Markdown')
         else:
-            await update.message.reply_text("未知参数。用法:\n`/thinking high` - 高强度思考\n`/thinking max` - 最大强度思考\n`/thinking off` - 关闭思考", parse_mode='Markdown')
+            await update.message.reply_text(self._t("thinking_unknown", uid_str), parse_mode='Markdown')
 
     async def regenerate_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """处理/regenerate命令 - 重新生成上一轮回复并删除废弃消息"""
@@ -439,12 +800,13 @@ class TelegramBot:
         user_id = str(user.id)
 
         if not self._is_user_allowed(int(user_id)):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
-        last_user_msg = self.memory_db.get_last_user_message(user_id)
+        uid_str = str(user_id)
+        last_user_msg = self.memory_db.get_last_user_message(uid_str)
         if not last_user_msg:
-            await update.message.reply_text("没有可以重新生成的消息~ | 先发条消息给我吧")
+            await update.message.reply_text(self._t("regen_no_msg", uid_str))
             return
 
         # 删除旧一轮对话（DB）
@@ -493,7 +855,7 @@ class TelegramBot:
             asyncio.create_task(self._process_memory_async(user_id, last_user_msg))
         except Exception as e:
             logger.error(f"重新生成消息失败: {e}", exc_info=True)
-            error_msg = f"重新生成出错了: {str(e)}"
+            error_msg = self._t("regen_error", uid_str, e=str(e))
             try:
                 await update.message.reply_text(error_msg)
             except Exception:
@@ -531,7 +893,7 @@ class TelegramBot:
 
         # 检查用户权限
         if not self._is_user_allowed(int(user_id)):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
         # 获取消息文本
@@ -629,7 +991,7 @@ class TelegramBot:
 
         except Exception as e:
             logger.error(f"处理消息失败: {e}", exc_info=True)
-            error_msg = f"出错了: {str(e)}，请稍后再试"
+            error_msg = self._t("msg_error", user_id, e=str(e))
 
             try:
                 await update.message.reply_text(error_msg)
@@ -741,7 +1103,7 @@ class TelegramBot:
 
         db_msg = self.memory_db.get_message_by_tg_id(replied_tg_id)
         if not db_msg:
-            await update.message.reply_text("找不到要编辑的消息记录~ 可能太久了，不支持编辑")
+            await update.message.reply_text(self._t("edit_not_found", user_id))
             return
 
         db_id = db_msg["id"]
@@ -780,7 +1142,7 @@ class TelegramBot:
         # 判断编辑后最后一条消息是否为用户消息，是则需要重新生成 bot 回复
         remaining = self.memory_db.get_conversation_from_id(user_id, db_id)
         if not remaining:
-            await update.message.reply_text("编辑完成，但对话记录似乎出了问题~")
+            await update.message.reply_text(self._t("edit_broken", user_id))
             return
 
         last_role = remaining[-1][0]
@@ -828,7 +1190,7 @@ class TelegramBot:
                 # 恢复已删除的用户消息
                 self.memory_db.add_message(user_id, "user", user_msg_content,
                                            telegram_msg_id=update.message.message_id)
-                await update.message.reply_text(f"编辑后重新生成出错: {e}")
+                await update.message.reply_text(self._t("edit_regenerate_error", user_id, e=str(e)))
                 return
 
         # 输出当前对话结构摘要
@@ -839,16 +1201,16 @@ class TelegramBot:
             all_msgs = remaining
 
         for i, (role, content) in enumerate(all_msgs):
-            prefix = "你说" if role == "user" else "bot说"
+            prefix = self._t("status_history_you", user_id) if role == "user" else self._t("status_history_bot", user_id)
             short = content[:80] + "..." if len(content) > 80 else content
             summary_lines.append(f"  {prefix}: {short}")
 
         if not summary_lines:
             return
 
-        summary = "当前对话结构:\n" + "\n".join(summary_lines[-20:])
+        summary = self._t("summary_header", user_id) + "\n" + "\n".join(summary_lines[-20:])
         if len(all_msgs) > 20:
-            summary += f"\n...（共 {len(all_msgs)} 条，只显示最近 20 条）"
+            summary += self._t("summary_truncated", user_id, n=len(all_msgs))
 
         await update.message.reply_text(summary)
 
@@ -970,21 +1332,21 @@ class TelegramBot:
         try:
             title, content = await self._do_compact(user_id, since)
             if not title:
-                await status_msg.edit_text("已没有对话可总结~")
+                await status_msg.edit_text(self._t("compact_nothing", user_id))
                 return
             self.memory_db.create_compact_record(user_id, title, content)
-            await status_msg.edit_text(f"日记写好啦！\n\n*{title}*\n\n{content}\n\n`/compact list` 可查看所有日记",
+            await status_msg.edit_text(self._t("compact_done", user_id, title=title, content=content),
                                        parse_mode='Markdown')
         except Exception as e:
             try:
-                await status_msg.edit_text(f"写日记出错了: {e}")
+                await status_msg.edit_text(self._t("compact_error", user_id, e=str(e)))
             except Exception:
                 pass
 
     async def _show_compact_page(self, update_or_query, user_id: str, page: int = 1):
         records = self.memory_db.get_compact_records(user_id)
         if not records:
-            text = "还没有日记记录~\n使用 `/compact` 生成第一篇日记吧"
+            text = self._t("compact_list_empty", user_id)
             if hasattr(update_or_query, 'message'):
                 await update_or_query.message.reply_text(text)
             else:
@@ -997,7 +1359,7 @@ class TelegramBot:
         start = (page - 1) * per_page
         end = min(start + per_page, total)
         page_records = records[start:end]
-        lines = [f"日记列表 ({total} 篇，第 {page}/{total_pages} 页):"]
+        lines = [self._t("compact_list_header", user_id, total=total, page=page, pages=total_pages)]
         for i, (rid, rtitle, rtime) in enumerate(page_records, start + 1):
             lines.append(f"{i}. {rtime[:16]} — {rtitle[:15]}")
         text = "\n".join(lines)
@@ -1006,9 +1368,9 @@ class TelegramBot:
             buttons.append([InlineKeyboardButton(f"{i}. {rtitle[:20]}", callback_data=f"compact_view:{rid}")])
         nav = []
         if page > 1:
-            nav.append(InlineKeyboardButton("◀ 上一页", callback_data=f"compact_page:{page - 1}"))
+            nav.append(InlineKeyboardButton(self._t("prev_page_btn", user_id), callback_data=f"compact_page:{page - 1}"))
         if page < total_pages:
-            nav.append(InlineKeyboardButton("下一页 ▶", callback_data=f"compact_page:{page + 1}"))
+            nav.append(InlineKeyboardButton(self._t("next_page_btn", user_id), callback_data=f"compact_page:{page + 1}"))
         if nav:
             buttons.append(nav)
         kb = InlineKeyboardMarkup(buttons)
@@ -1022,10 +1384,10 @@ class TelegramBot:
 
     async def _show_status_tab(self, update_or_query, user_id: str, tab: str):
         tabs = {
-            "overview": ("运行概况", self._status_overview),
-            "data": ("数据统计", self._status_data),
-            "history": ("最近对话", self._status_history),
-            "mood": ("心情", self._status_mood),
+            "overview": (self._t("status_tab_overview", user_id), self._status_overview),
+            "data": (self._t("status_tab_data", user_id), self._status_data),
+            "history": (self._t("status_tab_history", user_id), self._status_history),
+            "mood": (self._t("status_tab_mood", user_id), self._status_mood),
         }
         label, handler = tabs.get(tab, tabs["overview"])
         text = handler(user_id)
@@ -1043,45 +1405,46 @@ class TelegramBot:
             await update_or_query.edit_message_text(text, reply_markup=kb)
 
     def _status_overview(self, user_id: str) -> str:
-        status = self.get_status()
+        status = self.get_status(user_id)
         thinking = self.llm_manager.get_thinking_status()
         if thinking["enabled"]:
-            thinking_str = f"开启 (强度: {thinking['effort']})"
+            thinking_str = self._t("thinking_status_on", user_id, effort=thinking['effort'])
         else:
-            thinking_str = "关闭"
+            thinking_str = self._t("thinking_status_off", user_id)
         today = self.stats.get("today_messages", 0)
-        return f"""Bot状态 · 运行概况
-运行时间: {status['uptime']}
-今日消息: {today} / 总计: {status['total_messages']}
-成功率: {status['success_rate']:.1%}
-平均响应: {self._get_avg_response_time():.1f}s
-数据库: {status['memory_db_size']}
-模型: {status['config']['model']}  温度: {status['config']['temperature']}
-思考: {thinking_str}"""
+        return self._t("status_overview", user_id,
+                       uptime=status['uptime'],
+                       today=today,
+                       total=status['total_messages'],
+                       rate=status['success_rate'],
+                       avg=self._get_avg_response_time(),
+                       db=status['memory_db_size'],
+                       model=status['config']['model'],
+                       temp=status['config']['temperature'],
+                       thinking=thinking_str)
 
     def _status_data(self, user_id: str) -> str:
         stats = self.memory_db.get_memory_stats(user_id)
         types = stats.get("memory_types", {})
-        type_lines = "\n".join([f"  {k}: {v}" for k, v in sorted(types.items())]) if types else "  无"
-        lc = stats.get("last_clear") or "从未"
+        type_lines = "\n".join([f"  {k}: {v}" for k, v in sorted(types.items())]) if types else f"  {self._t('status_data_none', user_id)}"
+        lc = stats.get("last_clear") or self._t("status_data_never", user_id)
         lcp = stats.get("last_compact")
-        lcp_str = f"{lcp['title']} ({lcp['time'][:16]})" if lcp else "无"
-        return f"""Bot状态 · 数据统计
-对话条数: {stats['conversations']}
-长期记忆: {stats['memories']}
-日记总结: {stats['compacts']}
-记忆类型分布:
-{type_lines}
-上次 clear: {lc}
-最近日记: {lcp_str}"""
+        lcp_str = f"{lcp['title']} ({lcp['time'][:16]})" if lcp else self._t("status_data_none", user_id)
+        return self._t("status_data", user_id,
+                       conv=stats['conversations'],
+                       mem=stats['memories'],
+                       compact=stats['compacts'],
+                       types=type_lines,
+                       lc=lc,
+                       lcp=lcp_str)
 
     def _status_history(self, user_id: str) -> str:
         recent = self.memory_db.get_recent_conversation(user_id, limit=10)
         if not recent:
-            return "Bot状态 · 最近对话\n\n暂无对话记录~"
-        lines = ["Bot状态 · 最近对话\n"]
+            return self._t("status_history_empty", user_id)
+        lines = [self._t("status_history_header", user_id) + "\n"]
         for role, content in recent[-10:]:
-            prefix = "你说" if role == "user" else "bot说"
+            prefix = self._t("status_history_you", user_id) if role == "user" else self._t("status_history_bot", user_id)
             short = content[:60] + "..." if len(content) > 60 else content
             lines.append(f"  {prefix}: {short}")
         return "\n".join(lines)
@@ -1090,20 +1453,20 @@ class TelegramBot:
         mood = self._get_mood_state(user_id)
         def bar(v): return "█" * (v // 2) + "░" * (5 - v // 2)
         erotic = self.memory_db.get_erotic_state(user_id)
-        em_str = "活跃中" if erotic.get("active") else "正常"
-        return f"""Bot状态 · 心情
-开心: {bar(mood['happiness'])} {mood['happiness']}/10
-想念: {bar(mood['missing'])} {mood['missing']}/10
-精力: {bar(mood['energy'])} {mood['energy']}/10
-生气: {bar(mood['anger'])} {mood['anger']}/10
-性欲: {bar(mood['arousal'])} {mood['arousal']}/10
-文爱状态: {em_str}"""
+        em_str = self._t("erotic_active", user_id) if erotic.get("active") else self._t("erotic_normal", user_id)
+        return self._t("status_mood", user_id,
+                       bar_h=bar(mood['happiness']), h=mood['happiness'],
+                       bar_m=bar(mood['missing']), m=mood['missing'],
+                       bar_e=bar(mood['energy']), e=mood['energy'],
+                       bar_a=bar(mood['anger']), a=mood['anger'],
+                       bar_ar=bar(mood['arousal']), ar=mood['arousal'],
+                       erotic=em_str)
 
     async def compact_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_id = str(user.id)
         if not self._is_user_allowed(int(user_id)):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
         args = context.args
         if args and args[0] == "list":
@@ -1112,9 +1475,9 @@ class TelegramBot:
         since = self.memory_db.get_last_clear_at(user_id)
         messages = self.memory_db.get_messages_since_clear(user_id, since)
         if not messages:
-            await update.message.reply_text("自上次 /clear 以来还没有对话记录~")
+            await update.message.reply_text(self._t("compact_none", user_id))
             return
-        status_msg = await update.message.reply_text("正在写日记...")
+        status_msg = await update.message.reply_text(self._t("compact_writing", user_id))
         asyncio.create_task(self._process_compact_async(user_id, since, status_msg))
 
     async def continue_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1123,12 +1486,12 @@ class TelegramBot:
         user_id = str(user.id)
 
         if not self._is_user_allowed(int(user_id)):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
         recent = self.memory_db.get_recent_conversation(user_id, limit=10)
         if not recent:
-            await update.message.reply_text("还没有对话历史呢~ 先聊几句吧")
+            await update.message.reply_text(self._t("continue_no_history", user_id))
             return
 
         try:
@@ -1162,7 +1525,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"继续对话失败: {e}", exc_info=True)
             try:
-                await update.message.reply_text(f"继续对话出错: {e}")
+                await update.message.reply_text(self._t("continue_error", user_id, e=str(e)))
             except Exception:
                 pass
             self.stats["failed_responses"] += 1
@@ -1173,15 +1536,15 @@ class TelegramBot:
         user_id = str(user.id)
 
         if not self._is_user_allowed(int(user_id)):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
         recent = self.memory_db.get_recent_conversation(user_id, limit=50)
         if not recent:
-            await update.message.reply_text("还没有对话历史呢~ 先聊几句吧")
+            await update.message.reply_text(self._t("suggest_no_history", user_id))
             return
 
-        status_msg = await update.message.reply_text("正在生成候选回复...")
+        status_msg = await update.message.reply_text(self._t("suggest_generating", user_id))
 
         # ── 手动构建上下文（只取最近50条对话） ──
         messages = []
@@ -1226,13 +1589,13 @@ class TelegramBot:
         # 过滤空结果
         valid = [c for c in candidates if c and len(c) >= 2]
         if len(valid) < 2:
-            await status_msg.edit_text("生成候选回复失败了~ 再来一次吧")
+            await status_msg.edit_text(self._t("suggest_failed", user_id))
             return
 
         self._suggestions[user_id] = valid[:3]
 
         # 构建展示文本
-        lines = ["选一条作为你的回复：\n"]
+        lines = [self._t("suggest_choose", user_id) + "\n"]
         for i, text in enumerate(valid[:3], 1):
             lines.append(f"{i}. {text}")
         display_text = "\n".join(lines)
@@ -1240,8 +1603,8 @@ class TelegramBot:
         # 构建按钮（只显示实际可用数量）
         btn_row = []
         for i in range(len(valid[:3])):
-            btn_row.append(InlineKeyboardButton(f"选项{i+1}", callback_data=f"suggest:{i}"))
-        kb_rows = [btn_row, [InlineKeyboardButton("取消", callback_data="suggest:cancel")]]
+            btn_row.append(InlineKeyboardButton(self._t("suggest_option", user_id, i=i+1), callback_data=f"suggest:{i}"))
+        kb_rows = [btn_row, [InlineKeyboardButton(self._t("suggest_cancel_btn", user_id), callback_data="suggest:cancel")]]
 
         await status_msg.edit_text(
             display_text,
@@ -1253,13 +1616,13 @@ class TelegramBot:
         user_id_str = str(user_id)
         candidates = self._suggestions.pop(user_id_str, None)
         if not candidates or choice_index >= len(candidates):
-            await query.answer("候选已过期，请重新 /suggest", show_alert=True)
+            await query.answer(self._t("suggest_expired", user_id_str), show_alert=True)
             return
 
         chosen_text = candidates[choice_index]
 
         # 移除按钮，显示选中的回复
-        await query.edit_message_text(f"你说: {chosen_text}", reply_markup=None)
+        await query.edit_message_text(self._t("suggest_said", user_id_str, text=chosen_text), reply_markup=None)
         await query.answer()
 
         # 存入 DB
@@ -1291,7 +1654,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"候选选择后生成失败: {e}", exc_info=True)
             try:
-                await query.message.reply_text(f"生成回复出错: {e}")
+                await query.message.reply_text(self._t("suggest_error", user_id_str, e=str(e)))
             except Exception:
                 pass
             self.stats["failed_responses"] += 1
@@ -1302,18 +1665,17 @@ class TelegramBot:
         user_id = str(user.id)
 
         if not self._is_user_allowed(int(user_id)):
-            await update.message.reply_text("抱歉，您没有被授权使用此机器人。")
+            await update.message.reply_text(self._t("perm_denied", str(user_id)))
             return
 
         mood = self._get_mood_state(user_id)
         def bar(v): return "█" * (v // 2) + "░" * (5 - v // 2)
-        text = f"""当前心情
-
-开心: {bar(mood['happiness'])} {mood['happiness']}/10
-想念: {bar(mood['missing'])} {mood['missing']}/10
-精力: {bar(mood['energy'])} {mood['energy']}/10（值越高精力越好）
-生气: {bar(mood['anger'])} {mood['anger']}/10
-性欲: {bar(mood['arousal'])} {mood['arousal']}/10"""
+        text = self._t("mood_title", user_id) + "\n\n" + self._t("mood_body", user_id,
+            bar_h=bar(mood['happiness']), h=mood['happiness'],
+            bar_m=bar(mood['missing']), m=mood['missing'],
+            bar_e=bar(mood['energy']), e=mood['energy'],
+            bar_a=bar(mood['anger']), a=mood['anger'],
+            bar_ar=bar(mood['arousal']), ar=mood['arousal'])
         await update.message.reply_text(text)
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1323,21 +1685,29 @@ class TelegramBot:
         user_id = update.effective_user.id
 
         if not self._is_user_allowed(user_id):
-            await query.answer("无权限", show_alert=True)
+            await query.answer(self._t("cb_no_perm", str(user_id)), show_alert=True)
             return
 
+        # ── 语言切换按钮 ──
+        if data.startswith("lang:"):
+            lang = data.split(":", 1)[1]
+            self._set_lang(str(user_id), lang)
+            await query.edit_message_text(self._t("lang_set", str(user_id)), reply_markup=None)
+            await query.answer()
+
         # ── 思考模式按钮 ──
-        if data.startswith("think:"):
+        elif data.startswith("think:"):
             mode = data.split(":", 1)[1]
+            uid_str = str(user_id)
             if mode == "high":
                 self.llm_manager.set_thinking(enabled=True, effort="high")
-                await query.answer("已设置: 高强度思考")
+                await query.answer(self._t("cb_thinking_high", uid_str))
             elif mode == "max":
                 self.llm_manager.set_thinking(enabled=True, effort="max")
-                await query.answer("已设置: 最大强度思考")
+                await query.answer(self._t("cb_thinking_max", uid_str))
             elif mode == "off":
                 self.llm_manager.set_thinking(enabled=False)
-                await query.answer("已关闭思考模式")
+                await query.answer(self._t("cb_thinking_off", uid_str))
             await query.edit_message_reply_markup(reply_markup=None)
 
         # ── 记忆删除按钮 ──
@@ -1347,13 +1717,13 @@ class TelegramBot:
                 mem_id = int(mem_id_str)
                 page = int(page_str)
             except (ValueError, IndexError):
-                await query.answer("参数错误", show_alert=True)
+                await query.answer(self._t("cb_param_error", str(user_id)), show_alert=True)
                 return
 
             if self.memory_db.delete_memory_by_id(str(user_id), mem_id):
-                await query.answer("已删除")
+                await query.answer(self._t("cb_deleted", str(user_id)))
             else:
-                await query.answer("删除失败", show_alert=True)
+                await query.answer(self._t("cb_del_fail", str(user_id)), show_alert=True)
                 return
 
             # 刷新当前页
@@ -1364,7 +1734,7 @@ class TelegramBot:
             try:
                 page = int(data.split(":", 1)[1])
             except (ValueError, IndexError):
-                await query.answer("参数错误", show_alert=True)
+                await query.answer(self._t("cb_param_error", str(user_id)), show_alert=True)
                 return
 
             await self._show_memory_page(query, user_id, page)
@@ -1377,32 +1747,33 @@ class TelegramBot:
             choice = data.split(":", 1)[1]
             if choice == "cancel":
                 self._suggestions.pop(str(user_id), None)
-                await query.edit_message_text("已取消", reply_markup=None)
+                await query.edit_message_text(self._t("cb_cancelled", str(user_id)), reply_markup=None)
                 await query.answer()
             else:
                 try:
                     idx = int(choice)
                     await self._process_suggestion_selection(query, user_id, idx)
                 except (ValueError, IndexError):
-                    await query.answer("选项无效", show_alert=True)
+                    await query.answer(self._t("suggest_invalid", str(user_id)), show_alert=True)
 
         # ── compact 日记按钮 ──
         elif data.startswith("compact_view:"):
             try:
                 rid = int(data.split(":", 1)[1])
                 record = self.memory_db.get_compact_record(rid)
-                if not record or record["user_id"] != str(user_id):
-                    await query.answer("记录不存在", show_alert=True)
+                uid_str = str(user_id)
+                if not record or record["user_id"] != uid_str:
+                    await query.answer(self._t("cb_not_found", uid_str), show_alert=True)
                     return
                 text = f"*{record['title']}*\n_{record['created_at']}_\n\n{record['content']}"
                 kb = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀ 返回列表", callback_data="compact_list"),
-                    InlineKeyboardButton("删除", callback_data=f"compact_delete:{rid}")
+                    InlineKeyboardButton(self._t("compact_back_btn", uid_str), callback_data="compact_list"),
+                    InlineKeyboardButton(self._t("compact_del_btn", uid_str), callback_data=f"compact_delete:{rid}")
                 ]])
                 await query.edit_message_text(text, parse_mode='Markdown', reply_markup=kb)
                 await query.answer()
             except (ValueError, IndexError):
-                await query.answer("参数错误", show_alert=True)
+                await query.answer(self._t("cb_param_error", str(user_id)), show_alert=True)
 
         elif data == "compact_list":
             await self._show_compact_list(query, str(user_id))
@@ -1412,47 +1783,48 @@ class TelegramBot:
                 page = int(data.split(":", 1)[1])
                 await self._show_compact_page(query, str(user_id), page)
             except (ValueError, IndexError):
-                await query.answer("参数错误", show_alert=True)
+                await query.answer(self._t("cb_param_error", str(user_id)), show_alert=True)
 
         elif data.startswith("compact_delete:"):
+            uid_str = str(user_id)
             try:
                 rid = int(data.split(":", 1)[1])
-                if self.memory_db.delete_compact_record(rid, str(user_id)):
-                    await query.answer("已删除")
+                if self.memory_db.delete_compact_record(rid, uid_str):
+                    await query.answer(self._t("cb_deleted", uid_str))
                 else:
-                    await query.answer("删除失败", show_alert=True)
+                    await query.answer(self._t("cb_del_fail", uid_str), show_alert=True)
                     return
-                await self._show_compact_list(query, str(user_id))
+                await self._show_compact_list(query, uid_str)
             except (ValueError, IndexError):
-                await query.answer("参数错误", show_alert=True)
+                await query.answer(self._t("cb_param_error", uid_str), show_alert=True)
 
         # ── clear 总结选择按钮 ──
         elif data.startswith("clear:"):
             choice = data.split(":", 1)[1]
+            uid_str = str(user_id)
             if choice == "cancel":
-                await query.edit_message_text("已取消", reply_markup=None)
+                await query.edit_message_text(self._t("cb_cancelled", uid_str), reply_markup=None)
                 await query.answer()
             elif choice in ("compact", "direct"):
-                uid = str(user_id)
                 title = content = None
                 if choice == "compact":
-                    await query.edit_message_text("正在总结...", reply_markup=None)
-                    since = self.memory_db.get_last_clear_at(uid)
+                    await query.edit_message_text(self._t("cb_summarizing", uid_str), reply_markup=None)
+                    since = self.memory_db.get_last_clear_at(uid_str)
                     try:
-                        title, content = await self._do_compact(uid, since)
+                        title, content = await self._do_compact(uid_str, since)
                         if title:
-                            self.memory_db.create_compact_record(uid, title, content)
+                            self.memory_db.create_compact_record(uid_str, title, content)
                     except Exception:
                         pass
                 else:
-                    await query.edit_message_text("正在清除...", reply_markup=None)
-                deleted = self.memory_db.clear_user_conversation(uid)
-                self.memory_db.record_last_clear(uid)
+                    await query.edit_message_text(self._t("cb_clearing", uid_str), reply_markup=None)
+                deleted = self.memory_db.clear_user_conversation(uid_str)
+                self.memory_db.record_last_clear(uid_str)
                 if title:
-                    await query.edit_message_text(f"日记已保存，已清除 {deleted} 条对话\n\n*{title}*\n_{content[:200]}_",
+                    await query.edit_message_text(self._t("cb_clear_compacted", uid_str, n=deleted, title=title, content=content[:200]),
                                                   parse_mode='Markdown')
                 else:
-                    await query.edit_message_text(f"已清除 {deleted} 条对话历史")
+                    await query.edit_message_text(self._t("cb_clear_direct", uid_str, n=deleted))
                 await query.answer()
 
         # ── status tab 切换 ──
@@ -1461,7 +1833,7 @@ class TelegramBot:
             await self._show_status_tab(query, str(user_id), tab)
 
         else:
-            await query.answer("未知操作", show_alert=True)
+            await query.answer(self._t("cb_unknown", str(user_id)), show_alert=True)
 
     async def _show_memory_page(self, query, user_id: int, page: int):
         """显示记忆列表的某一页（每页10条），通过 inline keyboard 实现删除和翻页"""
@@ -1469,7 +1841,7 @@ class TelegramBot:
         memories = self.memory_db.get_user_memories_with_id(uid)
 
         if not memories:
-            await query.edit_message_text("已经没有长期记忆了~")
+            await query.edit_message_text(self._t("mem_no_list", uid))
             return
 
         total = len(memories)
@@ -1481,11 +1853,11 @@ class TelegramBot:
         end = min(start + per_page, total)
         page_memories = memories[start:end]
 
-        lines = [f"长期记忆 ({total} 条，第 {page}/{total_pages} 页):"]
+        lines = [self._t("mem_page_header", uid, total=total, page=page, pages=total_pages)]
         for i, (mem_id, mem_type, content, importance) in enumerate(page_memories, start + 1):
             short = content[:50] + "..." if len(content) > 50 else content
-            type_emoji = {"personal": "[个人]", "preference": "[喜好]", "event": "[事件]",
-                          "emotion": "[情感]", "fact": "[事实]"}.get(mem_type, "[其他]")
+            type_key = f"mem_type_{mem_type}" if f"mem_type_{mem_type}" in T.get("zh", {}) else "mem_type_other"
+            type_emoji = self._t(type_key, uid)
             lines.append(f"{i}. {type_emoji} [{mem_type}] {short} (重要度:{importance})")
 
         text = "\n".join(lines)
@@ -1495,16 +1867,16 @@ class TelegramBot:
         for i, (mem_id, mem_type, content, importance) in enumerate(page_memories, start + 1):
             short = content[:30]
             button_rows.append([InlineKeyboardButton(
-                f"删除 #{i}: {short}", callback_data=f"delmem:{mem_id}:{page}"
+                self._t("mem_delete_btn", uid, i=i, text=short), callback_data=f"delmem:{mem_id}:{page}"
             )])
 
         # 翻页按钮
         nav_row = []
         if page > 1:
-            nav_row.append(InlineKeyboardButton("◀ 上一页", callback_data=f"delmem_page:{page - 1}"))
+            nav_row.append(InlineKeyboardButton(self._t("prev_page_btn", uid), callback_data=f"delmem_page:{page - 1}"))
         nav_row.append(InlineKeyboardButton(f"📄 {page}/{total_pages}", callback_data="noop"))
         if page < total_pages:
-            nav_row.append(InlineKeyboardButton("下一页 ▶", callback_data=f"delmem_page:{page + 1}"))
+            nav_row.append(InlineKeyboardButton(self._t("next_page_btn", uid), callback_data=f"delmem_page:{page + 1}"))
         button_rows.append(nav_row)
 
         kb = InlineKeyboardMarkup(button_rows)
@@ -1513,7 +1885,7 @@ class TelegramBot:
             await query.edit_message_text(text, reply_markup=kb)
         except Exception:
             await query.edit_message_text(
-                text[:4000] + "\n...（内容过长截断）", reply_markup=kb
+                text[:4000] + "\n" + self._t("mem_page_truncated", uid), reply_markup=kb
             )
 
     def run(self):
@@ -1557,7 +1929,7 @@ class TelegramBot:
                         try:
                             await self.application.bot.send_message(
                                 chat_id=admin_id,
-                                text=f"Telegram机器人启动成功！\n启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                                text=self._t("bot_startup", "zh", time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                             )
                         except Exception as e:
                             logger.warning(f"无法发送启动通知给 {admin_id}: {e}")
@@ -1590,17 +1962,18 @@ class TelegramBot:
             application: Telegram应用实例
         """
         commands = [
-            BotCommand("suggest", "生成3条候选回复供选择"),
-            BotCommand("mood", "查看当前心情"),
-            BotCommand("continue", "让bot继续独自生成下一条回复"),
-            BotCommand("regenerate", "重新生成上一轮回复"),
-            BotCommand("clear", "清除对话历史（短期记忆）"),
-            BotCommand("clear_memories", "清除长期记忆(警告)"),
-            BotCommand("thinking", "思考模式 (按钮版)"),
-            BotCommand("help", "显示帮助信息"),
-            BotCommand("status", "显示机器人状态"),
-            BotCommand("start", "开始使用机器人"),
-            BotCommand("compact", "日记总结对话 (/compact list 查看历史)"),
+            BotCommand("suggest", self._t("bot_cmd_suggest")),
+            BotCommand("mood", self._t("bot_cmd_mood")),
+            BotCommand("continue", self._t("bot_cmd_continue")),
+            BotCommand("regenerate", self._t("bot_cmd_regenerate")),
+            BotCommand("clear", self._t("bot_cmd_clear")),
+            BotCommand("clear_memories", self._t("bot_cmd_clear_memories")),
+            BotCommand("thinking", self._t("bot_cmd_thinking")),
+            BotCommand("help", self._t("bot_cmd_help")),
+            BotCommand("status", self._t("bot_cmd_status")),
+            BotCommand("start", self._t("bot_cmd_start")),
+            BotCommand("compact", self._t("bot_cmd_compact")),
+            BotCommand("language", self._t("bot_cmd_language")),
         ]
 
         await application.bot.set_my_commands(commands)
@@ -1627,6 +2000,7 @@ class TelegramBot:
         application.add_handler(CommandHandler("continue", self.continue_command))
         application.add_handler(CommandHandler("compact", self.compact_command))
         application.add_handler(CommandHandler("mood", self.mood_command))
+        application.add_handler(CommandHandler("language", self.language_command))
 
         # 文本消息处理器
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_text_message))
@@ -1672,8 +2046,11 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"保存统计信息失败: {e}")
 
-    def get_status(self) -> Dict:
+    def get_status(self, user_id: str = None) -> Dict:
         """获取机器人状态
+
+        Args:
+            user_id: 用户ID（用于国际化）
 
         Returns:
             状态字典
@@ -1684,7 +2061,7 @@ class TelegramBot:
 
         return {
             "status": "running",
-            "uptime": f"{int(hours)}小时{int(minutes)}分钟{int(seconds)}秒",
+            "uptime": self._t("status_uptime_hours", user_id or "zh", h=int(hours), m=int(minutes), s=int(seconds)),
             "total_messages": self.stats["total_messages"],
             "success_rate": (
                 self.stats["successful_responses"] / self.stats["total_messages"]
