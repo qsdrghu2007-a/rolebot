@@ -157,3 +157,7 @@ python main.py
 
 - [维护指南（中文）](维护指南.md)
 - [Maintenance Guide (English)](MAINTENANCE.md)
+
+---
+
+`telegram-bot` `chatbot` `roleplay` `character-ai` `ai-girlfriend` `ai-companion` `virtual-character` `persona` `personality` `llm` `openai-compatible` `deepseek` `gpt` `local-llm` `ollama` `mood-system` `long-term-memory` `world-book` `lorebook` `diary` `sqlite` `python` `self-hosted` `bilingual` `中文` `角色扮演` `虚拟女友` `AI伙伴` `心情系统` `长期记忆` `世界书` `日记总结`
