@@ -152,3 +152,8 @@ python main.py
 - 需要能访问 Telegram API 和你的 LLM 服务地址 · *Requires access to Telegram API and your LLM endpoint*
 - API 密钥请妥善保管，勿提交到 Git（`.gitignore` 已排除 `config.yaml`） · *Keep API keys private — `config.yaml` is gitignored*
 - `memory.db` 包含所有对话历史，注意隐私 · *memory.db stores all conversations — handle with care*
+
+## 更多文档 · More Docs
+
+- [维护指南（中文）](维护指南.md)
+- [Maintenance Guide (English)](MAINTENANCE.md)
