@@ -192,6 +192,7 @@ def load_example_config():
             return yaml.safe_load(f)
     return {
         "llm": {"api_key": "", "base_url": "https://api.deepseek.com", "model": "deepseek-v4-flash"},
+        "bot": {"language": "zh"},
         "telegram": {"bot_token": "", "allowed_user_ids": [], "enable_group_chat": False,
                      "admin_user_ids": [], "connect_timeout": 30, "read_timeout": 30},
         "memory": {"db_path": "memory.db", "max_history": 150, "max_tokens": 16000},
@@ -229,6 +230,7 @@ def main():
     print_banner()
 
     config = load_example_config()
+    config["bot"]["language"] = _lang  # setup 时的语言作为默认 bot 语言
     needs_setup = not os.path.exists(CONFIG_PATH)
 
     if not needs_setup:

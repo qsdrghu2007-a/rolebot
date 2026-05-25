@@ -48,6 +48,7 @@ python main.py
 | `/mood` | 查看当前心情（含进度条） · *View mood with progress bars* |
 | `/continue` | 独自继续生成下一条 · *Bot continues on its own* |
 | `/regenerate` | 重新生成上轮回复 · *Regenerate last reply* |
+| `/language` | 切换语言（中文/English） · *Switch language (中文/English)* |
 | `/clear` | 清除对话历史（可选 compact） · *Clear history (with optional summary)* |
 | `/clear_memories` | 清除所有长期记忆 · *Clear all long-term memories* |
 | `/list_memories` | 列出长期记忆 · *List memories* |
@@ -89,6 +90,7 @@ python main.py
 | **世界书** World book | 关键词触发角色背景记忆 · *Keyword-triggered character lore injection* |
 | **日记总结** Diary summaries | LLM 从角色视角写日记（`/compact`） · *Bot writes diary entries from character POV* |
 | **思考模式** Thinking mode | high / max / off 三档 · *Three intensity levels* |
+| **双语支持** Bilingual | `/language` 切换中英文界面 · *Switch between Chinese/English UI* |
 | **KV 缓存优化** Cache optimization | persona 固定在 messages[0] 保证高命中率 · *Fixed persona prefix for high KV cache hit rate* |
 
 ---

@@ -7,6 +7,9 @@ llm:
   base_url: "https://api.deepseek.com"    # 修改为你的服务商地址
   model: "deepseek-v4-flash"              # 修改为你的模型名称
 
+bot:
+  language: "zh"                           # 默认语言：zh(中文) / en(English)，首次 setup 后自动设置
+
 telegram:
   bot_token: "your-telegram-bot-token"
   allowed_user_ids: []

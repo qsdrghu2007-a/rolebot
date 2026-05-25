@@ -462,12 +462,12 @@ class TelegramBot:
     def _t(self, key: str, user_id: str = None, **kwargs) -> str:
         """根据用户语言设置翻译字符串"""
         if user_id is None:
-            lang = "zh"
+            lang = self.config.get("bot", {}).get("language", "zh")
         else:
             info = self.memory_db.get_user_info(str(user_id))
-            lang = "zh"
+            lang = self.config.get("bot", {}).get("language", "zh")
             if info and info.get("settings") and isinstance(info["settings"], dict):
-                lang = info["settings"].get("language", "zh")
+                lang = info["settings"].get("language", lang)
         s = T.get(lang, T["zh"]).get(key, key)
         if kwargs:
             s = s.format(**kwargs)

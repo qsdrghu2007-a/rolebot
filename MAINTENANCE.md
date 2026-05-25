@@ -60,6 +60,7 @@ Actual hit rate ~**96%** (98 out of 102 messages hit with max_history=100).
 | `/list_memories` | list_memories_command | List all long-term memories |
 | `/delete_memory <N>` | delete_memory_command | Delete a memory by number (no arg = paginated buttons) |
 | `/thinking` | thinking_command | Thinking mode high/max/off (button UI) |
+| `/language` | language_command | Switch language (中文/English) |
 | `/compact` | compact_command | Summarize chat as diary entry |
 | `/compact list` | compact_command(args) | Browse diary history |
 | `/status` | status_command | 4-tab dashboard (overview/data/history/mood) |
@@ -214,6 +215,12 @@ Never modify both counters simultaneously. Which counter is active is determined
 ### Why thinking mode defaults to on
 - Models like DeepSeek produce noticeably better responses with thinking enabled
 - Users can toggle off with `/thinking off` for speed
+
+### Bilingual support
+- `/language` command switches the user interface between Chinese and English
+- Language preference is stored in `user_info.settings.language`, effective immediately
+- The language chosen during `setup.py` is automatically written to `config.yaml` as `bot.language` and used as the default for new users
+- Translation dictionaries are in the `T` dict at the top of `telegram_bot.py`, covering ~80 keys across all user-facing messages
 
 ## Known Pitfalls
 
