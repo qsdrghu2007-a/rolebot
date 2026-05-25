@@ -1,157 +1,150 @@
-# Telegram 角色扮演聊天机器人
+# RoleBot — Telegram 角色扮演聊天机器人 <br><sub>Telegram Roleplay Chatbot</sub>
 
-基于 OpenAI 兼容 API 的通用角色扮演聊天机器人框架，支持自定义人格、长期记忆、心情系统。
+一个基于 OpenAI 兼容 LLM 的 Telegram 角色扮演框架。自定义人格、长期记忆、5维心情系统、世界书、对话编辑、日记总结 —— 配置即用。
 
-支持 DeepSeek / OpenAI / Groq / 本地模型（Ollama / vLLM / LM Studio）等任何兼容接口。
+*A Telegram roleplay chatbot powered by any OpenAI-compatible LLM. Custom persona, long-term memory, 5D mood engine, world book, conversation editing, diary summaries — zero code required.*
 
-## 快速开始
+支持 DeepSeek / OpenAI / Groq / 本地模型（Ollama / vLLM / LM Studio）。
 
-### 1. 安装依赖
+---
+
+## 快速开始 · Quick Start
+
+### 1. 安装依赖 · Install
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 配置
+### 2. 配置 · Configure
 
-**推荐方式 — 交互式引导：**
+**推荐 / Recommended — 交互式引导 / Interactive Setup：**
 
 ```bash
 python setup.py
 ```
+支持中英双语 · *Bilingual setup wizard (中文 / English)*
 
-按提示依次输入 API Key、API 地址、模型名称、Telegram Bot Token，并编辑你的角色人格文件。
-
-**手动方式：**
+**手动 / Manual：**
 
 复制 `config.example.yaml` 为 `config.yaml`，编辑 `llm` 部分填入 API Key / base_url / model，再编辑 `digital_person/persona_final-d.md` 编写你的角色设定。
 
-### 3. 运行
+*Copy `config.example.yaml` to `config.yaml`, fill in your `llm` settings, then edit `digital_person/persona_final-d.md` to define your character.*
+
+### 3. 运行 · Run
 
 ```bash
 python main.py
 ```
 
-## 全部命令
+---
+
+## 命令 · Commands
 
 | 命令 | 说明 |
 |------|------|
-| `/suggest` | 并行 3 路 LLM 生成候选**用户**回复，按钮选择 |
-| `/start` | 开始使用 |
-| `/mood` | 查看机器人当前心情（含进度条） |
-| `/continue` | 机器人独自继续生成下一条回复 |
-| `/regenerate` | 重新生成上一轮回复并删除原回复 |
-| `/clear` | 清除当前对话历史（提供"总结并清除"按钮，自动 compact 后清除） |
-| `/clear_memories` | 清除所有长期记忆（需二次确认） |
-| `/list_memories` | 列出长期记忆 |
-| `/delete_memory <N>` | 删除指定记忆（无参数显示按钮翻页版） |
-| `/thinking` | 设置思考模式（无参数显示按钮版，high/max/off） |
-| `/compact` | 日记视角总结自上次 clear 以来的对话 |
-| `/compact list` | 翻页查看历史日记（点击标题查看详情，可删除） |
-| `/help` | 显示帮助信息 |
-| `/status` | 4-tab 仪表盘（运行概况 / 数据统计 / 最近对话 / 心情） |
+| `/suggest` | 并行 3 路 LLM 生成候选**用户**回复 · *Generate 3 candidate replies for you* |
+| `/start` | 开始使用 · *Start the bot* |
+| `/mood` | 查看当前心情（含进度条） · *View mood with progress bars* |
+| `/continue` | 独自继续生成下一条 · *Bot continues on its own* |
+| `/regenerate` | 重新生成上轮回复 · *Regenerate last reply* |
+| `/clear` | 清除对话历史（可选 compact） · *Clear history (with optional summary)* |
+| `/clear_memories` | 清除所有长期记忆 · *Clear all long-term memories* |
+| `/list_memories` | 列出长期记忆 · *List memories* |
+| `/delete_memory <N>` | 删除指定记忆 · *Delete a memory by number* |
+| `/thinking` | 思考模式 high/max/off · *Set thinking intensity* |
+| `/compact` | 日记视角总结对话 · *Summarize chat as a diary entry* |
+| `/compact list` | 翻页查看历史日记 · *Browse diary history* |
+| `/help` | 显示帮助 · *Show help* |
+| `/status` | 4-tab 仪表盘 · *Status dashboard* |
 
-## 自定义角色
+---
 
-### 人格文件
+## 支持的 LLM · Supported Providers
 
-`digital_person/persona_final-d.md` — 编写你的角色设定，包括：
-- 基本信息（姓名、年龄、性格）
-- 语言风格（短句、动作()表示、语气词）
-- 核心规则（角色一致性、情感真实）
-- 背景故事、兴趣爱好
-- 与用户的关系
+修改 `config.yaml` 中的 `llm` 部分即可切换。*Just change the `llm` section in `config.yaml`.*
 
-### 世界书
+| Provider | `base_url` | `model` |
+|----------|-----------|---------|
+| **DeepSeek** | `https://api.deepseek.com` | `deepseek-v4-flash` |
+| **OpenAI** | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| **Groq** | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| **Ollama** | `http://localhost:11434/v1` | `qwen2.5:14b` |
+| **vLLM / LM Studio** | 自定义 · *custom* | 自定义 · *custom* |
 
-`digital_person/world_book.json` — 关键词触发的背景记忆，例如：
+> ollama 不需要真实 API Key，填任意值即可。*For Ollama, use any string as api_key (e.g. `ollama`).*
+
+---
+
+## 核心功能 · Core Features
+
+| 功能 Feature | 说明 Description |
+|---|---|
+| **长期记忆** Long-term memory | AI 自动判断值得记住的内容（阈值 ≥ 7） · *Auto-judges what's worth remembering* |
+| **心情系统** Mood engine | 5 维情绪（开心/想念/精力/生气/性欲）含时间衰减 · *5D mood with time-based decay* |
+| **文爱检测** Arousal state machine | 独立判断器 + 2-in/3-out 状态机 + 消息级快照 · *Separate judge + state machine + per-message snapshots* |
+| **编辑功能** Message editing | 回复即可编辑，后续自动重生成 + 状态机快照回滚 · *Reply to edit, auto-regenerate, state machine rolls back* |
+| **世界书** World book | 关键词触发角色背景记忆 · *Keyword-triggered character lore injection* |
+| **日记总结** Diary summaries | LLM 从角色视角写日记（`/compact`） · *Bot writes diary entries from character POV* |
+| **思考模式** Thinking mode | high / max / off 三档 · *Three intensity levels* |
+| **KV 缓存优化** Cache optimization | persona 固定在 messages[0] 保证高命中率 · *Fixed persona prefix for high KV cache hit rate* |
+
+---
+
+## 自定义角色 · Custom Character
+
+### 人格文件 · Persona File
+
+`digital_person/persona_final-d.md` — 包含以下部分 / *contains these sections*：
+
+- **基本信息** · *Basic info*：名字、年龄、性格 · *name, age, personality*
+- **语言风格** · *Speech style*：短句、动作 () 表示、语气词 · *short sentences, actions in (), filler words*
+- **核心规则** · *Core rules*：角色一致性、情感真实 · *stay in character, authentic emotions*
+- **背景故事** · *Backstory*：经历、创伤、成就 · *history, traumas, achievements*
+- **兴趣爱好** · *Hobbies*
+- **与用户的关系** · *Relationship with user*
+
+> 写得越详细，角色辨识度越高。建议至少 200 字。*The more detailed, the better. 200+ characters recommended.*
+
+### 世界书 · World Book
+
+`digital_person/world_book.json` — 关键词触发的背景记忆 / *keyword-triggered lore*：
+
 ```json
 [
   {
-    "keywords": ["生日", "纪念日"],
-    "content": "用户的生日是5月22日",
+    "keywords": ["生日", "birthday"],
+    "content": "用户的生日是5月22日 / User's birthday is May 22",
     "priority": 5
   }
 ]
 ```
 
-## 支持的 LLM 服务商
+---
 
-`config.yaml` 中修改 `llm` 部分即可切换：
-
-**DeepSeek：**
-```yaml
-llm:
-  api_key: "sk-xxxxx"
-  base_url: "https://api.deepseek.com"
-  model: "deepseek-v4-flash"
-```
-
-**OpenAI：**
-```yaml
-llm:
-  api_key: "sk-xxxxx"
-  base_url: "https://api.openai.com/v1"
-  model: "gpt-4o-mini"
-```
-
-**Groq：**
-```yaml
-llm:
-  api_key: "gsk_xxxxx"
-  base_url: "https://api.groq.com/openai/v1"
-  model: "llama-3.3-70b-versatile"
-```
-
-**本地模型（Ollama）：**
-```yaml
-llm:
-  api_key: "ollama"          # Ollama 不需要真实 key，填任意值即可
-  base_url: "http://localhost:11434/v1"
-  model: "qwen2.5:14b"
-```
-
-## 核心功能
-
-- **长期记忆**：AI 自动判断值得记住的内容（重要性阈值 ≥ 7）
-- **心情系统**：5 维情绪（开心/想念/精力/生气/性欲），懒加载时间衰减
-- **文爱检测**：独立 ArousalJudge API，状态机自主进入/退出
-- **编辑功能**：回复消息直接编辑，后续对话自动重新生成；状态机快照自动回滚
-- **思考模式**：high / max / off 三档，按钮切换（需模型支持）
-- **KV 缓存优化**：persona 固定在 messages[0] 保证缓存命中
-
-### 日记总结（Compact）
-- `/compact` — LLM 读取自上次 clear 以来的所有对话，从角色视角写一篇日记（100-300 字）
-- `/compact list` — 翻页按钮列表，点击查看详情，可删除
-- `/clear` 命令集成了自动 compact 提示
-
-### 升级版 /status 仪表盘
-- 4 个切换 tab：运行概况 / 数据统计 / 最近对话 / 心情
-- 运行概况：运行时间、今日/总计消息、成功率、**平均响应时间**
-- 心情：5 维进度条 + 文爱状态
-
-## 文件说明
+## 文件说明 · Project Structure
 
 ```
-├── setup.py                  # 首次配置引导
-├── main.py                   # 入口
-├── telegram_bot.py           # Telegram 机器人核心
-├── llm_client.py             # LLM API 客户端（OpenAI 兼容）
-├── prompt_engine.py          # 提示词引擎（KV 缓存优化）
-├── memory_db.py              # SQLite 数据库
-├── ai_memory_manager.py      # AI 记忆管理 + 性欲判断
-├── world_book.py             # 世界书关键词匹配
-├── config.yaml               # 配置文件
-├── config.example.yaml       # 配置模板
+├── setup.py                  # 双语配置引导 · Bilingual setup wizard
+├── main.py                   # 入口 · Entry point
+├── telegram_bot.py           # 机器人核心 · Bot core
+├── llm_client.py             # LLM API 客户端 · OpenAI-compatible client
+├── prompt_engine.py          # 提示词引擎 · Prompt engine (KV cache optimized)
+├── memory_db.py              # SQLite 数据库 · Database
+├── ai_memory_manager.py      # AI 记忆管理 + 性欲判断 · Memory + arousal judge
+├── world_book.py             # 世界书 · World book matcher
+├── config.example.yaml       # 配置模板 · Config template
 ├── digital_person/
-│   ├── persona_final-d.md    # 角色人格设定（可自定义）
-│   └── world_book.json       # 世界书记忆条目
-├── start_bot.bat / start.ps1 # 启动脚本
-└── data/                     # 持久化数据
+│   ├── persona_final-d.md    # 角色人格设定 · Character persona
+│   └── world_book.json       # 世界书记忆 · World book entries
+├── start_bot.bat / start.ps1 # 启动脚本 · Start scripts
+└── data/                     # 持久化数据 · Persistent data
 ```
 
-## 注意事项
+---
 
-- 机器人需要能访问 Telegram API 和你的 LLM 服务地址
-- 配置文件中的 API 密钥请妥善保管，不要提交到 Git
-- `memory.db` 存储所有对话历史，请注意隐私保护
+## 注意事项 · Notes
+
+- 需要能访问 Telegram API 和你的 LLM 服务地址 · *Requires access to Telegram API and your LLM endpoint*
+- API 密钥请妥善保管，勿提交到 Git（`.gitignore` 已排除 `config.yaml`） · *Keep API keys private — `config.yaml` is gitignored*
+- `memory.db` 包含所有对话历史，注意隐私 · *memory.db stores all conversations — handle with care*
