@@ -596,6 +596,7 @@ class TelegramBot:
             ])
             await update.message.reply_text(self._t("clear_prompt", uid_str), reply_markup=kb)
         else:
+            self._reset_arousal_on_clear(str(user_id))
             deleted_count = self.memory_db.clear_user_conversation(str(user_id))
             self.memory_db.record_last_clear(str(user_id))
             if deleted_count > 0:
@@ -1270,6 +1271,21 @@ class TelegramBot:
         mood = self._apply_mood_decay(user_id)
         return {k: round(v) for k, v in mood.items()}
 
+    def _reset_arousal_on_clear(self, user_id: str):
+        """/clear 后重置性欲值和文爱状态机，其他情绪和时间戳不变"""
+        info = self.memory_db.get_user_info(user_id)
+        old_updated = None
+        if info and isinstance(info.get("settings"), dict):
+            old_updated = info["settings"].get("mood_updated")
+
+        mood = self.memory_db.get_user_mood(user_id)
+        mood["arousal"] = 3
+        self.memory_db.set_user_mood(user_id, mood, updated_at=old_updated)
+
+        self.memory_db.save_erotic_state(user_id, {
+            "active": False, "count_enter": 0, "count_exit": 0,
+        })
+
     def _release_missing_if_expressed(self, user_id: str, response: str):
         """bot 回复中表达了想念 → missing -0.5（一条消息只减一次）"""
         keywords = ["想你", "想念", "好想你", "想你了"]
@@ -1818,6 +1834,7 @@ class TelegramBot:
                         pass
                 else:
                     await query.edit_message_text(self._t("cb_clearing", uid_str), reply_markup=None)
+                self._reset_arousal_on_clear(uid_str)
                 deleted = self.memory_db.clear_user_conversation(uid_str)
                 self.memory_db.record_last_clear(uid_str)
                 if title:
