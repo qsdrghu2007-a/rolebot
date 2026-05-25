@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Database
+memory.db
+*.db-journal
+
+# Logs
+*.log
+logs/
+
+# Stats
+bot_stats.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config (contains API keys)
+config.yaml
