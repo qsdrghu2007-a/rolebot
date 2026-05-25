@@ -261,13 +261,13 @@ def main():
     print(_("step1_providers"))
     print()
 
-    config["llm"]["api_key"] = input_required(
-        "api_key_prompt", config["llm"].get("api_key", ""), validate_api_key
-    )
-
     base_url = input(f"  {_('base_url_prompt')} ({_lang == 'zh' and '默认' or 'default'} {config['llm'].get('base_url', '')}): ").strip()
     if base_url:
         config["llm"]["base_url"] = base_url
+
+    config["llm"]["api_key"] = input_required(
+        "api_key_prompt", config["llm"].get("api_key", ""), validate_api_key
+    )
 
     model = input(f"  {_('model_prompt')} ({_lang == 'zh' and '默认' or 'default'} {config['llm'].get('model', '')}): ").strip()
     if model:
