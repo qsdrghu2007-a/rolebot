@@ -62,6 +62,8 @@ python main.py
 
 ## 支持的 LLM · Supported Providers
 
+**任何 OpenAI 兼容 API 均可使用**，以下是常见配置示例。*Any OpenAI-compatible API works. Below are common examples.*
+
 修改 `config.yaml` 中的 `llm` 部分即可切换。*Just change the `llm` section in `config.yaml`.*
 
 | Provider | `base_url` | `model` |
@@ -70,7 +72,7 @@ python main.py
 | **OpenAI** | `https://api.openai.com/v1` | `gpt-4o-mini` |
 | **Groq** | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
 | **Ollama** | `http://localhost:11434/v1` | `qwen2.5:14b` |
-| **vLLM / LM Studio** | 自定义 · *custom* | 自定义 · *custom* |
+| **任意兼容服务** · *Any compatible API* | `https://你的服务地址` | `你的模型名` |
 
 > ollama 不需要真实 API Key，填任意值即可。*For Ollama, use any string as api_key (e.g. `ollama`).*
 
