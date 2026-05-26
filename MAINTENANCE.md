@@ -216,6 +216,19 @@ Never modify both counters simultaneously. Which counter is active is determined
 - Models like DeepSeek produce noticeably better responses with thinking enabled
 - Users can toggle off with `/thinking off` for speed
 
+### New Chat Feature Checklist
+When adding a new feature that processes user messages (e.g., arousal judgment, memory judgment), you must check all 5 message paths for whether the feature should apply — **and ask the user first**:
+
+| Path | Description | Example (arousal) |
+|------|------|:---:|
+| Main chat `_process_message` | Normal conversation | ✓ Required |
+| `/continue` | Bot continues solo | ✗ No user content |
+| `/regenerate` | Regenerate reply | ✗ User message unchanged |
+| `/suggest` selection | Picked candidate reply | ✓ Text becomes user utterance |
+| `_handle_edit` | Edit a message | ✓ Only when editing own message |
+
+**Rule**: list these 5 paths, confirm with the user which ones need the feature, then implement. This avoids missed calls (e.g., `/suggest` initially lacked arousal processing) and redundant calls (e.g., `/regenerate` once double-called arousal).
+
 ### Bilingual support
 - `/language` command switches the user interface between Chinese and English
 - Language preference is stored in `user_info.settings.language`, effective immediately
