@@ -24,3 +24,6 @@ Thumbs.db
 
 # Config (contains API keys)
 config.yaml
+
+# Local maintenance guide (private notes)
+维护指南_本地.md
