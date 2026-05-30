@@ -32,6 +32,7 @@ prompt:
 logging:
   level: "INFO"
   file: "bot.log"
+  chat_log: "chat_history.log"
 
 advanced:
   temperature: 0.78

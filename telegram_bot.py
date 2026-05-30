@@ -432,6 +432,9 @@ class TelegramBot:
         self.read_timeout = config["telegram"].get("read_timeout", 30)
         self.proxy_url = config["telegram"].get("proxy_url")  # 可选代理
 
+        # 聊天记录日志
+        self.chat_log_path = config.get("logging", {}).get("chat_log", "chat_history.log")
+
         # 应用实例
         self.application = None
 
@@ -842,7 +845,7 @@ class TelegramBot:
             self.memory_db.add_message(user_id, "user", last_user_msg)
             bot_db_id = self.memory_db.add_message(user_id, "assistant", response)
 
-            sent_msg = await update.message.reply_text(response)
+            sent_msg = await self._reply_and_log(update.message, user_id, user.full_name, response)
             self._bot_reply_ids[user_id] = sent_msg.message_id
             if bot_db_id:
                 self._bot_db_ids[user_id] = bot_db_id
@@ -922,6 +925,9 @@ class TelegramBot:
 
         logger.info(f"收到消息 [{user.full_name}]: {message_text}")
 
+        # 记录到聊天日志
+        self._write_chat_log(user_id, user.full_name, "user", message_text)
+
         # 更新统计
         self.stats["total_messages"] += 1
 
@@ -978,7 +984,7 @@ class TelegramBot:
             asyncio.create_task(self._process_arousal_async(user_id, user_message, user_msg_db_id))
 
             # 6. 发送响应
-            sent_msg = await update.message.reply_text(response)
+            sent_msg = await self._reply_and_log(update.message, user_id, nickname, response)
             self._bot_reply_ids[user_id] = sent_msg.message_id
 
             # 回填 bot 回复的 telegram_msg_id 到 DB
@@ -1173,7 +1179,7 @@ class TelegramBot:
                 if bot_db_id:
                     self._bot_db_ids[user_id] = bot_db_id
 
-                sent_msg = await update.message.reply_text(response)
+                sent_msg = await self._reply_and_log(update.message, user_id, nickname, response)
                 if bot_db_id:
                     self.memory_db._update_tg_msg_id(bot_db_id, sent_msg.message_id)
                 self._bot_reply_ids[user_id] = sent_msg.message_id
@@ -1529,7 +1535,7 @@ class TelegramBot:
             if bot_db_id:
                 self._bot_db_ids[user_id] = bot_db_id
 
-            sent_msg = await update.message.reply_text(response)
+            sent_msg = await self._reply_and_log(update.message, user_id, user.full_name, response)
             if bot_db_id:
                 self.memory_db._update_tg_msg_id(bot_db_id, sent_msg.message_id)
             self._bot_reply_ids[user_id] = sent_msg.message_id
@@ -1644,6 +1650,10 @@ class TelegramBot:
         # 存入 DB
         user_msg_db_id = self.memory_db.add_message(user_id_str, "user", chosen_text)
 
+        # 记录到聊天日志
+        nickname = query.from_user.full_name if query.from_user else user_id_str
+        self._write_chat_log(user_id_str, nickname, "user", chosen_text)
+
         # 生成 bot 回复
         try:
             messages = self.prompt_engine.build_messages(user_id_str, chosen_text, self.memory_db, self._get_mood_state(user_id_str))
@@ -1657,7 +1667,7 @@ class TelegramBot:
             if bot_db_id:
                 self._bot_db_ids[user_id_str] = bot_db_id
 
-            sent_msg = await query.message.reply_text(response)
+            sent_msg = await self._reply_and_log(query.message, user_id_str, nickname, response)
             if bot_db_id:
                 self.memory_db._update_tg_msg_id(bot_db_id, sent_msg.message_id)
             self._bot_reply_ids[user_id_str] = sent_msg.message_id
@@ -1904,6 +1914,21 @@ class TelegramBot:
             await query.edit_message_text(
                 text[:4000] + "\n" + self._t("mem_page_truncated", uid), reply_markup=kb
             )
+
+    def _write_chat_log(self, user_id: str, nickname: str, role: str, content: str):
+        """追加一条聊天记录到文本日志"""
+        try:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            short = content.replace("\n", " ")[:200]
+            with open(self.chat_log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}] [{user_id}:{nickname}] {role}: {short}\n")
+        except Exception as e:
+            logger.debug(f"写聊天日志失败: {e}")
+
+    async def _reply_and_log(self, reply_target, user_id: str, nickname: str, text: str, **kwargs):
+        """发送回复并自动写聊天日志"""
+        self._write_chat_log(user_id, nickname, "bot", text)
+        return await reply_target.reply_text(text, **kwargs)
 
     def run(self):
         """运行Telegram机器人（同步入口）"""
