@@ -25,6 +25,7 @@ digital_person/
 ```
 User message
   → handle_text_message()
+    → _write_chat_log("user") → chat log file   ← single user message hook
     → reply_to_message detected? → _handle_edit (edit mode)
     → _get_mood_state()          → lazy time decay
     → build_messages(mood)       → messages[0]=persona, [1..N-1]=history, [N]=WB+mood+msg
@@ -33,7 +34,10 @@ User message
     → add_message(user + assistant) to DB
     → create_task → _process_memory_async (memory + mood delta)
     → create_task → _process_arousal_async (arousal state machine)
+    → _reply_and_log(target, ...) → send reply + "bot" log  ← unified bot reply wrapper
 ```
+
+**Chat log architecture**: `_write_chat_log` appends to a plain text file; `_reply_and_log` wraps `reply_text` and automatically logs bot responses. All 5 message paths (normal chat, continue, regenerate, suggest selection, handle_edit) send bot replies through `_reply_and_log`, requiring no separate log calls per path.
 
 ## KV Cache Structure
 
@@ -234,6 +238,13 @@ When adding a new feature that processes user messages (e.g., arousal judgment, 
 - Language preference is stored in `user_info.settings.language`, effective immediately
 - The language chosen during `setup.py` is automatically written to `config.yaml` as `bot.language` and used as the default for new users
 - Translation dictionaries are in the `T` dict at the top of `telegram_bot.py`, covering ~80 keys across all user-facing messages
+
+### Chat log architecture
+- **User messages**: logged at a single point in `handle_text_message` (covers normal chat, regenerates, and edit commands)
+- **Bot replies**: `_reply_and_log(reply_target, user_id, nickname, text)` wraps `reply_text` and automatically writes the log
+- **Extra coverage**: `/suggest` selected text does not go through `handle_text_message`, so it gets a manual `_write_chat_log("user")` call
+- Log format: `[timestamp] [user_id:nickname] role: content`
+- Log path: `config.yaml` `logging.chat_log`, default `chat_history.log`
 
 ## Known Pitfalls
 
